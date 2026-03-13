@@ -1,0 +1,51 @@
+"""Ingest endpoint — triggers repository indexing."""
+import logging
+import time
+from fastapi import APIRouter, BackgroundTasks
+
+from codebase_analyst.models.schemas import IngestRequest, IngestResponse
+from codebase_analyst.core import run_ingestion
+
+logger = logging.getLogger(__name__)
+router = APIRouter()
+
+
+@router.post(
+    "/ingest",
+    response_model=IngestResponse,
+    summary="Initialize Context Database",
+    description="Ingest and index a new remote Git repository or local directory. This triggers the AST parser, computes dense vector embeddings, builds the Knowledge Graph, and stores data in Redis/Qdrant."
+)
+async def ingest_repository(request: IngestRequest, background_tasks: BackgroundTasks):
+    """
+    Ingest and index a repository.
+    Supports git URL or local path.
+    Runs synchronously for now; use background_tasks for async if needed.
+    """
+    t0 = time.time()
+
+    try:
+        result = run_ingestion(
+            repo_url=request.repo_url,
+            repo_path=request.repo_path,
+            repo_name=request.repo_name,
+            force_reindex=request.force_reindex,
+        )
+        duration = time.time() - t0
+
+        return IngestResponse(
+            status="success",
+            repo_name=result.get("repo_name", ""),
+            files_processed=result.get("files_processed", 0),
+            chunks_created=result.get("chunks_created", 0),
+            files_skipped=result.get("files_skipped", 0),
+            duration_seconds=round(duration, 2),
+            message=f"Repository indexed successfully in {duration:.1f}s",
+        )
+    except Exception as e:
+        logger.error("Ingestion failed: %s", e, exc_info=True)
+        return IngestResponse(
+            status="error",
+            repo_name=request.repo_name or "",
+            message=f"Ingestion failed: {e}",
+        )

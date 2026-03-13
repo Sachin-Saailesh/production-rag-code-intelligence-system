@@ -1,25 +1,46 @@
+# Core
 python-dotenv
-openai>=1.50.0
-qdrant-client
-sentence-transformers
-rank-bm25
-cohere
-gradio
+pydantic>=2.10.0
+pydantic-settings>=2.0.0
 fastapi>=0.115.0
 uvicorn>=0.34.0
-redis
+
+# LLM & Embedding
+openai>=1.50.0
+cohere
+sentence-transformers
 tiktoken
+
+# Vector Store & Retrieval
+qdrant-client>=1.7.0
+rank-bm25
+
+# Cache
+redis
+
+# Code Parsing (conditional for Python < 3.13 as tree-sitter-languages doesn't support 3.13 yet)
+tree-sitter>=0.21.3; python_version < '3.13'
+tree-sitter-languages>=1.10.2; python_version < '3.13'
+
+# Graph & Analysis
+networkx
+
+# Monitoring & Metrics
+prometheus-client
+psutil
+
+# Evaluation (optional)
 ragas
 datasets
 pandas
 numpy
-tqdm
-pydantic>=2.10.0
-gitpython
-prometheus-client
-psutil
-tree-sitter==0.21.*
-tree-sitter-languages==1.10.2
-networkx
-plotly
 
+# UI (optional)
+gradio
+
+# Dev tools
+tqdm
+gitpython
+
+# Testing
+pytest>=7.0

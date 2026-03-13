@@ -1,0 +1,183 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "Query Rate (requests/min)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(codebase_analyst_queries_total[5m]) * 60",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    },
+    {
+      "title": "HTTP Request Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(codebase_analyst_http_requests_total[5m]) * 60",
+          "legendFormat": "{{method}} {{endpoint}}"
+        }
+      ]
+    },
+    {
+      "title": "End-to-End Query Latency (P50 / P95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(codebase_analyst_query_latency_seconds_bucket[5m]))",
+          "legendFormat": "P50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(codebase_analyst_query_latency_seconds_bucket[5m]))",
+          "legendFormat": "P95"
+        }
+      ]
+    },
+    {
+      "title": "LLM Latency (P50 / P95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(codebase_analyst_llm_latency_seconds_bucket[5m]))",
+          "legendFormat": "P50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(codebase_analyst_llm_latency_seconds_bucket[5m]))",
+          "legendFormat": "P95"
+        }
+      ]
+    },
+    {
+      "title": "Retrieval Latency (P50 / P95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(codebase_analyst_retrieval_latency_seconds_bucket[5m]))",
+          "legendFormat": "P50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(codebase_analyst_retrieval_latency_seconds_bucket[5m]))",
+          "legendFormat": "P95"
+        }
+      ]
+    },
+    {
+      "title": "Rerank Latency (P50 / P95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(codebase_analyst_rerank_latency_seconds_bucket[5m]))",
+          "legendFormat": "P50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(codebase_analyst_rerank_latency_seconds_bucket[5m]))",
+          "legendFormat": "P95"
+        }
+      ]
+    },
+    {
+      "title": "Cache Hit Rate",
+      "type": "gauge",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 24 },
+      "targets": [
+        {
+          "expr": "codebase_analyst_cache_hits_total / (codebase_analyst_cache_hits_total + codebase_analyst_cache_misses_total)",
+          "legendFormat": "Hit Rate"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": 0 },
+              { "color": "yellow", "value": 0.3 },
+              { "color": "green", "value": 0.6 }
+            ]
+          },
+          "unit": "percentunit"
+        }
+      }
+    },
+    {
+      "title": "Cache Hits vs Misses",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 24 },
+      "targets": [
+        {
+          "expr": "rate(codebase_analyst_cache_hits_total[5m]) * 60",
+          "legendFormat": "Hits/min"
+        },
+        {
+          "expr": "rate(codebase_analyst_cache_misses_total[5m]) * 60",
+          "legendFormat": "Misses/min"
+        }
+      ]
+    },
+    {
+      "title": "System Resources",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 24 },
+      "targets": [
+        {
+          "expr": "codebase_analyst_cpu_percent",
+          "legendFormat": "CPU %"
+        },
+        {
+          "expr": "codebase_analyst_memory_mb",
+          "legendFormat": "Memory MB"
+        }
+      ]
+    },
+    {
+      "title": "Indexed Files & Chunks (Total)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 12, "x": 0, "y": 32 },
+      "targets": [
+        {
+          "expr": "codebase_analyst_indexed_files_total",
+          "legendFormat": "Files"
+        },
+        {
+          "expr": "codebase_analyst_indexed_chunks_total",
+          "legendFormat": "Chunks"
+        }
+      ]
+    },
+    {
+      "title": "Embedding Generation Latency",
+      "type": "timeseries",
+      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 32 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(codebase_analyst_embedding_latency_seconds_bucket[5m]))",
+          "legendFormat": "P95"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["codebase-analyst"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Codebase Analyst Dashboard",
+  "uid": "codebase-analyst-main",
+  "version": 1
+}

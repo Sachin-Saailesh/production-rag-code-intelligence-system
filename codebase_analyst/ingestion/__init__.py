@@ -1,3 +1,3 @@
-from .parser import CodeParser
-from .chunker import CodeChunker
 from .processor import RepositoryIngester
+from .chunker import CodeChunker
+from .parser import CodeParser

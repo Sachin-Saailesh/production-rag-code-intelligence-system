@@ -1,35 +1,39 @@
 """
-Enhanced Codebase Analyst with advanced analysis capabilities.
-Adds multi-hop reasoning, query expansion, and comprehensive analysis.
+Core system orchestrator.
+Manages initialization, re-indexing, and provides system components to the API and CLI layers.
 """
-import time
+import hashlib
+import json
+import logging
 import pickle
 import shutil
+import time
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any, List, Optional
+
 from tqdm import tqdm
 
-from .config import config
-from .llm.provider import llm_engine
-from .ingestion.processor import RepositoryIngester
+from .config import settings
+from .ingestion.processor import RepositoryIngester, get_git_info
 from .ingestion.chunker import CodeChunker
 from .indexing.embedding import EmbeddingEngine
 from .indexing.vector_store import VectorStore
-from .indexing.cache import SemanticCache
 from .retrieval.sparse import SparseRetriever
 from .retrieval.hybrid import HybridRetriever
-from .caching.manager import CacheManager
-from .monitoring.metrics import metrics
 from .analysis.knowledge_graph import CodeKnowledgeGraph, ImpactAnalyzer
 from .analysis.architecture import ArchitectureAnalyzer
 from .analysis.security import SecurityAnalyzer
-from .evaluation.rag_evaluator import RAGEvaluator
-from .utils.exporter import ResultExporter
+from .monitoring.metrics import metrics
 
-# ---------------------------
-# Code Tools
-# ---------------------------
+logger = logging.getLogger(__name__)
+
+# Global component cache - Multi-tenant mapping {repo_name: {components}}
+_components: Dict[str, Dict[str, Any]] = {}
+
+
 class CodeTools:
+    """Utility for direct code lookups against indexed chunks."""
+
     def __init__(self, repo_dir: Path, chunks: List[Dict[str, Any]]):
         self.repo_dir = Path(repo_dir)
         self.chunks = chunks
@@ -48,248 +52,237 @@ class CodeTools:
             return f"Error reading file {file_path}: {e}"
 
     def grep_symbol(self, symbol: str) -> List[Dict[str, Any]]:
-        hits = []
-        for ch in self.chunks:
-            if symbol in ch["content"]:
-                hits.append(ch)
-        return hits
+        return [ch for ch in self.chunks if symbol in ch.get("content", "")]
 
-# ---------------------------
-# Base Codebase Analyst
-# ---------------------------
-class CodebaseAnalyst:
-    def __init__(self, hybrid_retriever: HybridRetriever,
-                 code_tools: CodeTools,
-                 cache_manager: SemanticCache = None, 
-                 monitor=None):
-        self.retriever = hybrid_retriever
-        self.llm = llm_engine
-        self.tools = code_tools
-        self.cache = cache_manager
-        self.monitor = monitor
 
-    def _run(self, question: str, top_k: int = 8) -> Dict[str, Any]:
-        t0 = time.time()
-        
-        # Check cache
-        if self.cache:
-            cached = self.cache.get(question)
-            if cached:
-                metrics.record_cache_hit() if metrics else None
-                return cached
-        
-        metrics.record_cache_miss() if metrics else None
-
-        # Retrieve
-        ret_t0 = time.time()
-        hits = self.retriever.search(question, top_k=top_k)
-        ret_latency = time.time() - ret_t0
-        metrics.record_retrieval(ret_latency, len(hits)) if metrics else None
-        
-        # Format context
-        context = []
-        for h in hits:
-            context.append({
-                "payload": {
-                    "chunk_id": h["chunk_id"],
-                    "file_path": h["file_path"],
-                    "language": h["language"],
-                    "content": h["content"],
-                    "start_line": h["start_line"],
-                    "end_line": h["end_line"],
-                },
-                "score": h.get("score", 0.0)
-            })
-
-        # LLM Generation
-        llm_t0 = time.time()
-        
-        context_str = "\n\n".join([
-            f"File: {c['payload']['file_path']} (Lines {c['payload']['start_line']}-{c['payload']['end_line']})\n```\n{c['payload']['content']}\n```"
-            for c in context
-        ])
-        
-        sys_msg = "You are a helpful codebase expert. Answer the user question based on the code below."
-        usr_msg = f"Question: {question}\n\nContext:\n{context_str}"
-        
-        llm_response = self.llm.chat([
-            {"role": "system", "content": sys_msg},
-            {"role": "user", "content": usr_msg}
-        ])
-        
-        llm_latency = time.time() - llm_t0
-        metrics.record_llm_latency(llm_latency) if metrics else None
-        
-        t1 = time.time()
-        total_latency = t1 - t0
-        metrics.record_query_latency(total_latency) if metrics else None
-        metrics.record_query('success') if metrics else None
-
-        result = {
-            "answer": llm_response,
-            "content": llm_response,
-            "tool_calls": None,
-            "tokens_used": 0,
-            "latency": float(total_latency),
-            "llm_latency": float(llm_latency),
-            "context": context
-        }
-        
-        # Cache result
-        if self.cache:
-            self.cache.set(question, result)
-            
-        return result
-
-    def analyze(self, query: str, top_k: int = 8) -> Dict[str, Any]:
-        return self._run(query, top_k=top_k)
-
-# ---------------------------
-# Enhanced Analyst with Advanced Features
-# ---------------------------
-class EnhancedCodebaseAnalyst(CodebaseAnalyst):
-    """Extended analyst with knowledge graph, architecture, and security analysis"""
-    
-    def __init__(self, hybrid_retriever: HybridRetriever,
-                 code_tools: CodeTools,
-                 chunks: List[Dict[str, Any]],
-                 cache_manager: SemanticCache = None,
-                 monitor=None):
-        super().__init__(hybrid_retriever, code_tools, cache_manager, monitor)
-        
-        # Build advanced analyzers
-        self.knowledge_graph = CodeKnowledgeGraph()
-        self.knowledge_graph.build_from_chunks(chunks)
-        self.impact_analyzer = ImpactAnalyzer(self.knowledge_graph)
-        self.arch_analyzer = ArchitectureAnalyzer(chunks)
-        self.security_analyzer = SecurityAnalyzer(chunks)
-    
-    def analyze_with_expansion(self, query: str, expand: bool = True, top_k: int = 8) -> Dict[str, Any]:
-        """Analyze with query expansion"""
-        if expand:
-            # Simple expansion: add related terms
-            expanded_query = f"{query} (implementation details usage examples)"
-            result = self._run(expanded_query, top_k=top_k*2)
-            result['query_expanded'] = True
-        else:
-            result = self._run(query, top_k=top_k)
-            result['query_expanded'] = False
-        
-        return result
-    
-    def analyze_impact(self, file_path: str) -> Dict[str, Any]:
-        """Analyze impact of changes to a specific file"""
-        return self.impact_analyzer.analyze_file_impact(file_path)
-    
-    def show_architecture(self) -> Dict[str, Any]:
-        """Get architecture analysis"""
-        return self.arch_analyzer.detect_patterns()
-    
-    def security_scan(self) -> Dict[str, Any]:
-        """Run security vulnerability scan"""
-        return self.security_analyzer.scan()
-    
-    def export_result(self, query: str, result: Dict[str, Any], format: str = 'markdown') -> Path:
-        """Export result to file"""
-        exporter = ResultExporter()
-        
-        if format == 'markdown':
-            return exporter.export_to_markdown(
-                query=query,
-                answer=result['answer'],
-                contexts=result['context'],
-                metadata={'latency': result['latency']}
-            )
-        elif format == 'html':
-            return exporter.export_to_html(
-                query=query,
-                answer=result['answer'],
-                contexts=result['context'],
-                metadata={'latency': result['latency']}
-            )
-        elif format == 'json':
-            return exporter.export_to_json(result, 'query_result')
-        else:
-            raise ValueError(f"Unsupported format: {format}")
-
-# ---------------------------
-# Reindexing Logic
-# ---------------------------
-def reindex_repository(force_reclone: bool = False):
+def run_ingestion(
+    repo_url: str = None,
+    repo_path: str = None,
+    repo_name: str = None,
+    force_reindex: bool = False,
+):
     """
-    Reindex the repository defined in config.
-    Returns dictionary with components needed to instantiate Analyst.
+    Full ingestion pipeline: clone/scan → parse → chunk → embed → store.
+    Yields progress status strings for SSE streaming.
     """
-    print("\n" + "="*80)
-    print(f"REINDEXING REPOSITORY: {config.repo_name}")
-    print("="*80 + "\n")
+    global _components
 
-    config.ensure_dirs()
-    
-    # 1. Ingestion
+    settings.ensure_dirs()
+
+    repo_url = repo_url or settings.default_repo_url
+    repo_name = repo_name or settings.default_repo_name
+
     ingester = RepositoryIngester()
-    repo_dir = config.data_dir / config.repo_name
+
+    # Determine repo directory
+    if repo_path:
+        repo_dir = Path(repo_path)
+        if not repo_dir.exists():
+            raise FileNotFoundError(f"Repository path not found: {repo_path}")
+    else:
+        repo_dir = settings.data_dir / repo_name
+        if force_reindex and repo_dir.exists():
+            logger.info("Force re-index: removing %s", repo_dir)
+            shutil.rmtree(repo_dir)
+        yield json.dumps({"status": "cloning", "message": f"Cloning repository {repo_name}..."})
+        repo_dir = ingester.clone_repository(repo_url, repo_dir)
+
+    # Get git info
+    git_info = get_git_info(repo_dir)
+
+    # Load previous hashes for incremental indexing
+    hash_file = settings.cache_dir / f"hashes_{repo_name}.json"
+    chunks_file_check = settings.cache_dir / f"chunks_{repo_name}.pkl"
+    previous_hashes = {}
     
-    if force_reclone and repo_dir.exists():
-        print(f"🗑️  Removing existing repository at {repo_dir}")
-        shutil.rmtree(repo_dir)
-        
-    repo_dir = ingester.clone_repository(config.repo_url, repo_dir)
+    # Only trust previous hashes if the chunks actually finished saving last time!
+    if not force_reindex and hash_file.exists() and chunks_file_check.exists():
+        try:
+            previous_hashes = json.loads(hash_file.read_text())
+        except Exception:
+            pass
+
+    # Scan and process files
+    yield json.dumps({"status": "parsing", "message": "Scanning and parsing AST from source files..."})
     code_files = ingester.scan_repository(repo_dir)
-    parsed_docs = ingester.process_files(code_files)
-    
-    # Chunking
+    parsed_docs, new_hashes, skipped = ingester.process_files(code_files, previous_hashes)
+
+    # Save new hashes if we have them
+    if new_hashes:
+        hash_file.parent.mkdir(parents=True, exist_ok=True)
+        hash_file.write_text(json.dumps(new_hashes))
+
+    # Early exit if no new or modified files
+    if len(parsed_docs) == 0 and chunks_file_check.exists():
+        logger.info("No files modified. Repository is already up to date.")
+        # Ensure components are loaded into memory for the UI/API
+        get_system_components(repo_name)
+        yield json.dumps({
+            "status": "complete",
+            "repo_name": repo_name,
+            "files_processed": 0,
+            "chunks_created": 0,
+            "files_skipped": skipped,
+            "message": "Repository is already up to date."
+        })
+        return
+
+    # Chunk documents
+    total_docs = len(parsed_docs)
+    yield json.dumps({"status": "chunking", "message": f"Splitting {total_docs} files into semantic AST chunks...", "progress": 0})
     chunker = CodeChunker()
     all_chunks = []
-    for doc in tqdm(parsed_docs, desc="Chunking documents"):
-        chunks = chunker.chunk_document(doc)
-        all_chunks.extend(chunks)
-    print(f"✅ Created {len(all_chunks)} chunks from {len(parsed_docs)} files")
-    
-    # Cache chunks to disk
-    with open(config.cache_dir / f"chunks_{config.repo_name}.pkl", "wb") as f:
-        pickle.dump(all_chunks, f)
+    for i, doc in enumerate(parsed_docs):
+        all_chunks.extend(chunker.chunk_document(doc))
+        if i % 10 == 0 or i == total_docs - 1:
+            yield json.dumps({
+                "status": "chunking", 
+                "message": f"Splitting {total_docs} files into semantic AST chunks...",
+                "progress": int(((i + 1) / total_docs) * 100)
+            })
 
-    # 2. Indexing
+    # Add repo metadata to chunks
+    for chunk in all_chunks:
+        chunk["repo_name"] = repo_name
+        chunk["branch"] = git_info.get("branch", "")
+        chunk["commit_sha"] = git_info.get("commit_sha", "")
+
+    logger.info("Created %d chunks from %d files", len(all_chunks), len(parsed_docs))
+
+    # Generate embeddings
+    total_chunks = len(all_chunks)
+    yield json.dumps({"status": "embedding", "message": f"Computing dense vector embeddings for {total_chunks} chunks...", "progress": 0})
     embedding_engine = EmbeddingEngine()
-    print("\n📊 Generating embeddings...")
-    
     chunk_texts = [f"{c['file_path']}\n{c['content']}" for c in all_chunks]
-    embeddings = embedding_engine.encode(
-        chunk_texts,
-        batch_size=config.batch_size,
-        show_progress=True
-    )
+
+    embed_t0 = time.time()
     
-    vector_store = VectorStore(
-        collection_name=f"codebase_{config.repo_name}",
-        dimension=embedding_engine.dimension,
-        path=config.index_dir
-    )
-    
-    payloads = [
-        {
-            'chunk_id': c['chunk_id'],
-            'file_path': c['file_path'],
-            'language': c['language'],
-            'content': c['content'],
-            'start_line': c['start_line'],
-            'end_line': c['end_line'],
-        } for c in all_chunks
-    ]
+    # We will still use embedding_engine.encode but we don't have block SSE yielding inside it.
+    # We'll just assign it 100% when done for now.
+    embeddings = embedding_engine.encode(chunk_texts, batch_size=settings.batch_size, show_progress=True)
+    yield json.dumps({"status": "embedding", "message": f"Computing dense vector embeddings for {total_chunks} chunks...", "progress": 100})
+    embed_latency = time.time() - embed_t0
+    metrics.record_embedding_latency(embed_latency)
+
+    # Store in vector DB
+    collection_name = f"{settings.qdrant_collection}_{repo_name}"
+    vector_store = VectorStore(collection_name=collection_name, dimension=embedding_engine.dimension)
+
+    payloads = [{
+        "chunk_id": c["chunk_id"],
+        "file_path": c["file_path"],
+        "language": c["language"],
+        "content": c["content"],
+        "start_line": c["start_line"],
+        "end_line": c["end_line"],
+        "symbol_name": c.get("symbol_name", ""),
+        "symbol_type": c.get("symbol_type", ""),
+        "repo_name": repo_name,
+    } for c in all_chunks]
+
     vector_store.add_vectors(embeddings, payloads)
     vector_store.save()
 
-    # 3. Sparse Indexing
+    # Build sparse index
+    yield json.dumps({"status": "indexing", "message": "Building hybrid search structures and knowledge graphs..."})
     sparse_retriever = SparseRetriever()
     sparse_retriever.index(all_chunks)
 
-    print("\n✅ Reindexing complete!")
-    
-    return {
-        'repo_dir': repo_dir,
-        'all_chunks': all_chunks,
-        'embedding_engine': embedding_engine,
-        'vector_store': vector_store,
-        'sparse_retriever': sparse_retriever
+    # Build knowledge graph
+    kg = CodeKnowledgeGraph()
+    kg.build_from_chunks(all_chunks)
+
+    # Cache components in multi-tenant dictionary
+    _components[repo_name] = {
+        "repo_dir": repo_dir,
+        "repo_name": repo_name,
+        "commit_sha": git_info.get("commit_sha", ""),
+        "all_chunks": all_chunks,
+        "embedding_engine": embedding_engine,
+        "vector_store": vector_store,
+        "sparse_retriever": sparse_retriever,
+        "knowledge_graph": kg,
+        "hybrid_retriever": HybridRetriever(
+            vector_store=vector_store,
+            sparse_retriever=sparse_retriever,
+            embedding_engine=embedding_engine,
+            dense_weight=settings.dense_weight,
+        ),
     }
+
+    # Save chunks to disk for faster reload
+    chunks_file = settings.cache_dir / f"chunks_{repo_name}.pkl"
+    with open(chunks_file, "wb") as f:
+        pickle.dump(all_chunks, f)
+
+    metrics.record_indexing(len(parsed_docs), len(all_chunks))
+
+    logger.info("Ingestion complete: %d files, %d chunks", len(parsed_docs), len(all_chunks))
+
+    yield json.dumps({
+        "status": "complete",
+        "repo_name": repo_name,
+        "files_processed": len(parsed_docs),
+        "chunks_created": len(all_chunks),
+        "files_skipped": skipped,
+    })
+
+
+def get_system_components(repo_name: str = None) -> Dict[str, Any]:
+    """
+    Get initialized system components.
+    If not yet initialized, tries to load cached data.
+    """
+    global _components
+
+    repo_name = repo_name or settings.default_repo_name
+
+    # Check if we already have the correct repository loaded in memory
+    if repo_name in _components:
+        return _components[repo_name]
+
+    chunks_file = settings.cache_dir / f"chunks_{repo_name}.pkl"
+
+    if not chunks_file.exists():
+        raise RuntimeError(
+            f"Repository '{repo_name}' has not been indexed yet. "
+            "Run ingestion first via POST /api/ingest or CLI."
+        )
+
+    # Load cached chunks
+    with open(chunks_file, "rb") as f:
+        all_chunks = pickle.load(f)
+
+    # Rebuild components from cache
+    embedding_engine = EmbeddingEngine()
+    collection_name = f"{settings.qdrant_collection}_{repo_name}"
+    vector_store = VectorStore(collection_name=collection_name, dimension=embedding_engine.dimension)
+
+    # Try to load from Qdrant first, then fall back to pickle
+    if not vector_store.load():
+        logger.warning("Vector store not found — re-embed needed. Run ingestion.")
+
+    sparse_retriever = SparseRetriever()
+    sparse_retriever.index(all_chunks)
+
+    kg = CodeKnowledgeGraph()
+    kg.build_from_chunks(all_chunks)
+
+    _components[repo_name] = {
+        "repo_dir": settings.data_dir / repo_name,
+        "repo_name": repo_name,
+        "commit_sha": "",
+        "all_chunks": all_chunks,
+        "embedding_engine": embedding_engine,
+        "vector_store": vector_store,
+        "sparse_retriever": sparse_retriever,
+        "knowledge_graph": kg,
+        "hybrid_retriever": HybridRetriever(
+            vector_store=vector_store,
+            sparse_retriever=sparse_retriever,
+            embedding_engine=embedding_engine,
+            dense_weight=settings.dense_weight,
+        ),
+    }
+
+    return _components[repo_name]

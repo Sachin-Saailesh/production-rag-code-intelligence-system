@@ -8,8 +8,9 @@ import re
 class SecurityAnalyzer:
     """Scan code for potential security vulnerabilities"""
     
-    def __init__(self, chunks: List[Dict[str, Any]]):
+    def __init__(self, chunks: List[Dict[str, Any]], include_tests: bool = False):
         self.chunks = chunks
+        self.include_tests = include_tests
         self.vulnerability_patterns = {
             'hardcoded_secrets': {
                 'patterns': [
@@ -25,7 +26,6 @@ class SecurityAnalyzer:
                 'patterns': [
                     r'execute\([^)]*%s',
                     r'cursor\.execute\([^)]*\+',
-                    r'\.format\s*\(',
                 ],
                 'severity': 'high',
                 'description': 'Potential SQL injection vulnerability'
@@ -64,6 +64,17 @@ class SecurityAnalyzer:
         for chunk in self.chunks:
             content = chunk['content']
             file_path = chunk['file_path']
+            
+            if not self.include_tests:
+                # Fast semantic exclusion: Skip common test/doc/script paths
+                path_lower = file_path.lower()
+                if any(ignored in path_lower for ignored in ['/test', 'test_', 'docs/', 'docs_src/', 'tutorial', 'example', 'scripts/']):
+                    continue
+                # Skip chunks inside test functions/classes
+                symbol = chunk.get('symbol_name', '').lower()
+                if 'test' in symbol:
+                    continue
+            
             
             for vuln_type, config in self.vulnerability_patterns.items():
                 for pattern in config['patterns']:

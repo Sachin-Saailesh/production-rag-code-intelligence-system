@@ -1,92 +1,86 @@
+"""
+Centralized configuration using Pydantic Settings.
+All values are loaded from environment variables / .env file.
+"""
 import os
-import sys
 from pathlib import Path
-from dataclasses import dataclass
-from dotenv import load_dotenv
+from typing import Optional
+from pydantic_settings import BaseSettings
+from pydantic import Field
 
-# Load environment variables
-load_dotenv()
 
-# Attempt to load from Colab Secrets if available
-try:
-    from google.colab import userdata
-    known_keys = [
-        "OPENAI_API_KEY", "COHERE_API_KEY", 
-        "AZURE_OPENAI_API_VERSION", "AZURE_OPENAI_MODEL", 
-        "AZURE_OPENAI_DEPLOYMENT", "AZURE_OPENAI_ENDPOINT"
-    ]
-    for key in known_keys:
-        if key not in os.environ:
-            try:
-                val = userdata.get(key)
-                if val:
-                    os.environ[key] = val
-            except Exception:
-                pass
-except ImportError:
-    pass
+class Settings(BaseSettings):
+    """Application settings loaded from environment variables and .env file."""
 
-@dataclass
-class Config:
-    """System configuration"""
-    # Paths
-    # Detect if running in Colab to determine base path
-    is_colab = "google.colab" in sys.modules
-    base_dir: Path = Path("/content") if is_colab else Path(os.getcwd())
-    
-    work_dir: Path = base_dir
-    data_dir: Path = base_dir / "data"
-    index_dir: Path = base_dir / "index"
-    cache_dir: Path = base_dir / "cache"
+    # --- API Keys ---
+    openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
+    cohere_api_key: str = Field(default="", alias="COHERE_API_KEY")
 
-    # Repository
-    repo_url: str = "https://github.com/tiangolo/fastapi.git"
-    repo_name: str = "fastapi"
+    # --- LLM ---
+    llm_provider: str = Field(default="openai", alias="LLM_PROVIDER")
+    llm_model: str = Field(default="gpt-4o", alias="LLM_MODEL")
+    llm_temperature: float = Field(default=0.1, alias="LLM_TEMPERATURE")
+    max_output_tokens: int = Field(default=4096, alias="MAX_OUTPUT_TOKENS")
+    max_context_tokens: int = Field(default=128_000, alias="MAX_CONTEXT_TOKENS")
 
-    # Chunking
-    chunk_size: int = 512
-    chunk_overlap: int = 128
-    max_file_size: int = 1_000_000  # 1 MB
-    max_lines_per_chunk: int = 80
+    # Azure-specific
+    azure_endpoint: str = Field(default="", alias="AZURE_OPENAI_ENDPOINT")
+    azure_api_version: str = Field(default="2025-01-01-preview", alias="AZURE_OPENAI_API_VERSION")
+    azure_deployment: str = Field(default="", alias="AZURE_OPENAI_DEPLOYMENT")
 
-    # Embeddings
-    embedding_model: str = "mixedbread-ai/mxbai-embed-large-v1"
-    embedding_dim: int = 1024
+    # --- Embeddings ---
+    embedding_provider: str = Field(default="sentence_transformers", alias="EMBEDDING_PROVIDER")
+    embedding_model: str = Field(default="mixedbread-ai/mxbai-embed-large-v1", alias="EMBEDDING_MODEL")
+    embedding_dim: int = Field(default=1024, alias="EMBEDDING_DIM")
 
-    # Retrieval
-    top_k_dense: int = 5
-    top_k_sparse: int = 5
-    top_k_rerank: int = 5
+    # --- Qdrant ---
+    qdrant_url: str = Field(default="http://localhost:6333", alias="QDRANT_URL")
+    qdrant_api_key: Optional[str] = Field(default=None, alias="QDRANT_API_KEY")
+    qdrant_collection: str = Field(default="codebase_analyst", alias="QDRANT_COLLECTION")
 
-    # LLM (Azure OpenAI Defaults)
-    llm_provider: str = "azure_openai"
-    # Using the hardcoded defaults requested by the user
-    llm_model: str = os.getenv("AZURE_OPENAI_MODEL", "gpt-test")
-    api_version: str = os.getenv("AZURE_OPENAI_API_VERSION", "2025-01-01-preview")
-    deployment_name: str = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-test")
-    azure_endpoint: str = os.getenv("AZURE_OPENAI_ENDPOINT", "https://aifoundry2212.cognitiveservices.azure.com/")
-    
-    # Other API Keys
-    openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
-    cohere_api_key: str = os.getenv("COHERE_API_KEY", "")
+    # --- Redis ---
+    redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
+    cache_ttl: int = Field(default=3600, alias="CACHE_TTL")
 
-    max_context_tokens: int = 128_000
-    max_output_tokens: int = 4_096
-    temperature: float = 0.1
+    # --- Repository ---
+    default_repo_url: str = Field(
+        default="https://github.com/tiangolo/fastapi.git",
+        alias="DEFAULT_REPO_URL",
+    )
+    default_repo_name: str = Field(default="fastapi", alias="DEFAULT_REPO_NAME")
 
-    # Cache
-    use_redis: bool = False  # Set to True if Redis is available
-    cache_ttl: int = 3600
+    # --- Retrieval ---
+    top_k_dense: int = Field(default=10, alias="TOP_K_DENSE")
+    top_k_sparse: int = Field(default=10, alias="TOP_K_SPARSE")
+    top_k_rerank: int = Field(default=5, alias="TOP_K_RERANK")
+    dense_weight: float = Field(default=0.6, alias="DENSE_WEIGHT")
+    rerank_enabled: bool = Field(default=True, alias="RERANK_ENABLED")
 
-    # Performance
-    batch_size: int = 32
-    use_gpu: bool = True
+    # --- Chunking ---
+    max_lines_per_chunk: int = Field(default=80, alias="MAX_LINES_PER_CHUNK")
+    max_file_size: int = Field(default=1_000_000, alias="MAX_FILE_SIZE")
 
-    def ensure_dirs(self):
-        """Ensure that all required directories exist."""
+    # --- Server ---
+    host: str = Field(default="0.0.0.0", alias="HOST")
+    port: int = Field(default=8000, alias="PORT")
+    log_level: str = Field(default="info", alias="LOG_LEVEL")
+
+    # --- Paths ---
+    data_dir: Path = Field(default=Path("data"))
+    index_dir: Path = Field(default=Path("index"))
+    cache_dir: Path = Field(default=Path("cache"))
+    batch_size: int = Field(default=32)
+
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "populate_by_name": True,
+        "extra": "ignore",
+    }
+
+    def ensure_dirs(self) -> None:
         for d in [self.data_dir, self.index_dir, self.cache_dir]:
             d.mkdir(parents=True, exist_ok=True)
-        print(f"📂 Verified directories: {self.data_dir}, {self.index_dir}, {self.cache_dir}")
 
-# Global config instance
-config = Config()
+
+settings = Settings()

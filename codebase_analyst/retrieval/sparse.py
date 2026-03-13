@@ -1,7 +1,10 @@
 import re
 import math
+import logging
 from typing import List, Dict, Any, Tuple
 from tqdm import tqdm
+
+logger = logging.getLogger(__name__)
 
 class SparseRetriever:
     """TF-IDF based sparse retriever"""
@@ -18,7 +21,7 @@ class SparseRetriever:
         return re.findall(r"[A-Za-z_][A-Za-z0-9_\-\.]{1,64}", text)
 
     def index(self, chunks: List[Dict[str, Any]]):
-        print("🧮 Building sparse index (TF-IDF)...")
+        logger.info("Building sparse index (TF-IDF)...")
         self.docs = chunks
         self.N = len(chunks)
         self.doc_term_counts = []
