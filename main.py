@@ -77,6 +77,13 @@ async def prometheus_metrics():
     metrics.update_system_metrics()
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
+@app.get("/", include_in_schema=False)
+async def root():
+    """Root endpoint for health checks and API discovery."""
+    return {
+        "status": "online", 
+        "message": "Codebase Analyst API is running. Access /docs for API documentation."
+    }
 
 if __name__ == "__main__":
     uvicorn.run(
