@@ -1,5 +1,5 @@
-const API_BASE = "http://localhost:8000";
-
+// Fallback to localhost if the VITE_API_URL environment variable isn't set
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 // Fallback Mock Data
 const MOCKS = {
   health: { 
