@@ -24,7 +24,7 @@ export default function RepositoryIntelligence() {
     setIngestProgress(null);
     setIngestResult(null);
     try {
-      const res = await ingestRepository(repoUrl, repoName, (data) => {
+      const res = await ingestRepository(repoUrl, repoName, false, (data: any) => {
         setIngestProgress(data);
       });
       setIngestResult(res);
