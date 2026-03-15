@@ -105,7 +105,34 @@ def run_ingestion(
     # Scan and process files
     yield json.dumps({"status": "parsing", "message": "Scanning and parsing AST from source files..."})
     code_files = ingester.scan_repository(repo_dir)
-    parsed_docs, new_hashes, skipped = ingester.process_files(code_files, previous_hashes)
+
+    total_files = len(code_files)
+    new_hashes = {}
+    skipped = 0
+    all_chunks = []
+    chunker = CodeChunker()
+    
+    import gc
+    yield json.dumps({"status": "parsing", "message": f"Parsing and chunking {total_files} files...", "progress": 0})
+    
+    for i, (parsed_doc, fp_str, content_hash, is_skipped) in enumerate(ingester.process_files(code_files, previous_hashes)):
+        if content_hash:
+            new_hashes[fp_str] = content_hash
+            
+        if is_skipped:
+            skipped += 1
+        elif parsed_doc:
+            all_chunks.extend(chunker.chunk_document(parsed_doc))
+            
+        if i > 0 and i % 50 == 0:
+            gc.collect()
+            
+        if i % 10 == 0 or i == total_files - 1:
+            yield json.dumps({
+                "status": "parsing", 
+                "message": f"Parsing and chunking {total_files} files...",
+                "progress": int(((i + 1) / total_files) * 100)
+            })
 
     # Save new hashes if we have them
     if new_hashes:
@@ -113,7 +140,7 @@ def run_ingestion(
         hash_file.write_text(json.dumps(new_hashes))
 
     # Early exit if no new or modified files
-    if len(parsed_docs) == 0 and chunks_file_check.exists():
+    if len(all_chunks) == 0 and chunks_file_check.exists():
         logger.info("No files modified. Repository is already up to date.")
         # Ensure components are loaded into memory for the UI/API
         get_system_components(repo_name)
@@ -127,27 +154,14 @@ def run_ingestion(
         })
         return
 
-    # Chunk documents
-    total_docs = len(parsed_docs)
-    yield json.dumps({"status": "chunking", "message": f"Splitting {total_docs} files into semantic AST chunks...", "progress": 0})
-    chunker = CodeChunker()
-    all_chunks = []
-    for i, doc in enumerate(parsed_docs):
-        all_chunks.extend(chunker.chunk_document(doc))
-        if i % 10 == 0 or i == total_docs - 1:
-            yield json.dumps({
-                "status": "chunking", 
-                "message": f"Splitting {total_docs} files into semantic AST chunks...",
-                "progress": int(((i + 1) / total_docs) * 100)
-            })
-
     # Add repo metadata to chunks
     for chunk in all_chunks:
         chunk["repo_name"] = repo_name
         chunk["branch"] = git_info.get("branch", "")
         chunk["commit_sha"] = git_info.get("commit_sha", "")
 
-    logger.info("Created %d chunks from %d files", len(all_chunks), len(parsed_docs))
+    processed_files_count = len(new_hashes) - skipped  # Roughly equivalent to successful docs
+    logger.info("Created %d chunks from %d files", len(all_chunks), processed_files_count)
 
     # Generate embeddings
     total_chunks = len(all_chunks)
@@ -225,14 +239,14 @@ def run_ingestion(
     with open(chunks_file, "wb") as f:
         pickle.dump(all_chunks, f)
 
-    metrics.record_indexing(len(parsed_docs), len(all_chunks))
+    metrics.record_indexing(processed_files_count, len(all_chunks))
 
-    logger.info("Ingestion complete: %d files, %d chunks", len(parsed_docs), len(all_chunks))
+    logger.info("Ingestion complete: %d files, %d chunks", processed_files_count, len(all_chunks))
 
     yield json.dumps({
         "status": "complete",
         "repo_name": repo_name,
-        "files_processed": len(parsed_docs),
+        "files_processed": processed_files_count,
         "chunks_created": len(all_chunks),
         "files_skipped": skipped,
     })

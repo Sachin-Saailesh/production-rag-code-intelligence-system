@@ -128,17 +128,18 @@ class RepositoryIngester:
         self,
         code_files: List[Path],
         previous_hashes: Optional[Dict[str, str]] = None,
-    ) -> tuple:
+    ):
         """
-        Parse files and return parsed docs.
-        Returns (parsed_docs, new_hashes, skipped_count).
+        Parse files and yield parsed docs one by one.
+        Yields (parsed_doc, file_path_str, content_hash, is_skipped)
         """
+        import gc
         logger.info("Parsing %d files...", len(code_files))
-        docs = []
-        new_hashes: Dict[str, str] = {}
-        skipped = 0
 
-        for p in tqdm(code_files, desc="Reading files"):
+        for i, p in enumerate(tqdm(code_files, desc="Reading files")):
+            if i > 0 and i % 50 == 0:
+                gc.collect()
+                
             try:
                 content = p.read_text(encoding="utf-8", errors="ignore")
             except Exception:
@@ -146,18 +147,18 @@ class RepositoryIngester:
 
             content_hash = file_content_hash(content)
             fp_str = str(p)
-            new_hashes[fp_str] = content_hash
 
             # Skip unchanged files
             if previous_hashes and previous_hashes.get(fp_str) == content_hash:
-                skipped += 1
+                yield None, fp_str, content_hash, True
                 continue
 
             parsed = self.parser.parse_file(p)
             if parsed:
                 parsed["language"] = parsed.get("language") or guess_language(p)
                 parsed["content_hash"] = content_hash
-                docs.append(parsed)
+                yield parsed, fp_str, content_hash, False
+            else:
+                yield None, fp_str, content_hash, False
 
-        logger.info("Parsed %d files, skipped %d unchanged", len(docs), skipped)
-        return docs, new_hashes, skipped
+        gc.collect()
