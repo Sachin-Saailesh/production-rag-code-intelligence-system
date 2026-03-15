@@ -30,8 +30,8 @@ class Settings(BaseSettings):
 
     # --- Embeddings ---
     embedding_provider: str = Field(default="sentence_transformers", alias="EMBEDDING_PROVIDER")
-    embedding_model: str = Field(default="mixedbread-ai/mxbai-embed-large-v1", alias="EMBEDDING_MODEL")
-    embedding_dim: int = Field(default=1024, alias="EMBEDDING_DIM")
+    embedding_model: str = Field(default="all-MiniLM-L6-v2", alias="EMBEDDING_MODEL")
+    embedding_dim: int = Field(default=384, alias="EMBEDDING_DIM")
 
     # --- Qdrant ---
     qdrant_url: str = Field(default="http://localhost:6333", alias="QDRANT_URL")
