@@ -35,8 +35,6 @@ datasets
 pandas
 numpy
 
-# UI (optional)
-gradio
 
 # Dev tools
 tqdm

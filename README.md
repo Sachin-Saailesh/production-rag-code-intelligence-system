@@ -50,13 +50,13 @@ python main.py
 uvicorn main:app --reload --port 8000
 ```
 
-### 4. Docker Compose (Recommended)
+### 4. Docker Compose (Local Infrastructure)
 
 ```bash
 docker-compose up -d
 ```
 
-This starts all 5 services:
+This starts all 5 services for local development:
 | Service    | Port  | Description            |
 |------------|-------|------------------------|
 | **app**    | 8000  | FastAPI API server     |
@@ -64,6 +64,13 @@ This starts all 5 services:
 | **redis**  | 6379  | Semantic cache         |
 | **prometheus** | 9090 | Metrics collection  |
 | **grafana**| 3000  | Monitoring dashboards  |
+
+### 5. Public Deployment
+For public deployment, the recommended stack is:
+- **Frontend**: [Vercel](https://vercel.com/) (React/Vite)
+- **Backend API**: [Render](https://render.com/) or [Railway](https://railway.app/) (FastAPI)
+- **Vector DB**: [Qdrant Cloud](https://cloud.qdrant.io/)
+- **Cache**: [Upstash Redis](https://upstash.com/)
 
 ## CLI Usage
 
@@ -178,8 +185,6 @@ Key settings:
 │   │   └── metrics.py              # Prometheus metrics
 │   ├── evaluation/                 # RAG quality
 │   │   └── rag_evaluator.py        # RAGAS integration
-│   ├── ui/                         # Web interface
-│   │   └── gradio_app.py           # Gradio UI
 │   └── utils/                      # Utilities
 │       └── exporter.py             # JSON/MD/HTML export
 ├── monitoring/                     # Monitoring configs

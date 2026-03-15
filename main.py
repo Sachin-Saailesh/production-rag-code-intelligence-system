@@ -78,14 +78,6 @@ async def prometheus_metrics():
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
-# Mount Gradio UI at the root
-try:
-    import gradio as gr
-    from codebase_analyst.ui.gradio_app import create_ui
-    app = gr.mount_gradio_app(app, create_ui(), path="/")
-except ImportError:
-    logger.warning("Gradio not installed. Web UI will not be available.")
-
 if __name__ == "__main__":
     uvicorn.run(
         "main:app",
