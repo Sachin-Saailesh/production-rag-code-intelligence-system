@@ -1,3 +1,5 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+
 # Core
 python-dotenv
 pydantic>=2.10.0
