@@ -166,6 +166,16 @@ def run_ingestion(
 
     # Store in vector DB
     collection_name = f"{settings.qdrant_collection}_{repo_name}"
+
+    if force_reindex:
+        try:
+            from qdrant_client import QdrantClient
+            qc = QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key) if settings.qdrant_api_key else QdrantClient(url=settings.qdrant_url)
+            qc.delete_collection(collection_name)
+            logger.info("Force reindex: Deleted previous Qdrant collection %s", collection_name)
+        except Exception as e:
+            logger.warning("Could not delete Qdrant collection during force_reindex: %s", e)
+
     vector_store = VectorStore(collection_name=collection_name, dimension=embedding_engine.dimension)
 
     payloads = [{

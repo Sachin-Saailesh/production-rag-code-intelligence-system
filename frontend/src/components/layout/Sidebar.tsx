@@ -11,6 +11,7 @@ import {
   Settings, 
   ShieldAlert
 } from "lucide-react";
+import { useIngestion } from "@/contexts/IngestionContext";
 
 const NAV_ITEMS = [
   { name: "Overview", path: "/", icon: LayoutDashboard },
@@ -25,9 +26,21 @@ const NAV_ITEMS = [
 
 export function Sidebar() {
   const location = useLocation();
+  const { isIngestingGlobal } = useIngestion();
+
+  const handleLinkClick = (e: React.MouseEvent) => {
+    if (isIngestingGlobal) {
+      e.preventDefault();
+      alert("Please wait for the current indexing process to complete before navigating.");
+    }
+  };
 
   return (
-    <aside className="w-64 border-r border-border bg-card flex flex-col h-screen shrink-0">
+    <aside className="w-64 border-r border-border bg-card flex flex-col h-screen shrink-0 relative">
+      {isIngestingGlobal && (
+        <div className="absolute inset-x-0 top-0 h-1 bg-primary animate-pulse" />
+      )}
+      
       <div className="p-6 h-20 flex items-center border-b border-border">
         <div className="flex items-center gap-3">
           <div className="h-8 w-8 rounded-md bg-primary flex items-center justify-center text-primary-foreground font-bold shadow-md shadow-primary/20">
@@ -47,11 +60,14 @@ export function Sidebar() {
             <Link
               key={item.path}
               to={item.path}
+              onClick={handleLinkClick}
+              title={isIngestingGlobal ? "Navigation disabled during indexing" : ""}
               className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
+                "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors cursor-pointer",
                 isActive 
                   ? "bg-secondary text-secondary-foreground" 
-                  : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                  : "text-muted-foreground hover:text-foreground hover:bg-secondary/50",
+                isIngestingGlobal && !isActive ? "opacity-50 cursor-not-allowed" : ""
               )}
             >
               <item.icon className={cn("w-4 h-4", isActive ? "text-primary" : "opacity-70")} />
@@ -64,11 +80,14 @@ export function Sidebar() {
       <div className="p-4 border-t border-border mt-auto">
          <Link
             to="/settings"
+            onClick={handleLinkClick}
+            title={isIngestingGlobal ? "Navigation disabled during indexing" : ""}
             className={cn(
-              "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
+              "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors cursor-pointer",
               location.pathname === "/settings"
                 ? "bg-secondary text-secondary-foreground" 
-                : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                : "text-muted-foreground hover:text-foreground hover:bg-secondary/50",
+              isIngestingGlobal && location.pathname !== "/settings" ? "opacity-50 cursor-not-allowed" : ""
             )}
           >
             <Settings className="w-4 h-4 opacity-70" />

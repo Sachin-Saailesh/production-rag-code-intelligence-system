@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { FolderGit2, HardDrive, Files, GitCommit, Search, RefreshCw, BarChart4, Loader2, CheckCircle2, GitBranch } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ingestRepository, fetchRepos } from "@/services/api";
+import { useIngestion } from "@/contexts/IngestionContext";
 
 export default function RepositoryIntelligence() {
   const [repoUrl, setRepoUrl] = useState("");
@@ -10,6 +11,7 @@ export default function RepositoryIntelligence() {
   const [ingestProgress, setIngestProgress] = useState<any>(null);
   const [ingestResult, setIngestResult] = useState<any>(null);
   const [repos, setRepos] = useState<any[]>([]);
+  const { setIsIngestingGlobal } = useIngestion();
 
   useEffect(() => {
     fetchRepos().then(data => setRepos(data.repos || []));
@@ -21,6 +23,7 @@ export default function RepositoryIntelligence() {
     e.preventDefault();
     if (!repoUrl || !repoName) return;
     setIsIngesting(true);
+    setIsIngestingGlobal(true);
     setIngestProgress(null);
     setIngestResult(null);
     try {
@@ -32,14 +35,17 @@ export default function RepositoryIntelligence() {
       setRepoName("");
     } catch (err) {
       console.error(err);
-      setIsIngesting(false);
       fetchRepos().then(data => setRepos(data.repos || []));
+    } finally {
+      setIsIngesting(false);
+      setIsIngestingGlobal(false);
     }
   };
 
   const handleReindex = async () => {
     if (!activeRepo) return;
     setIsIngesting(true);
+    setIsIngestingGlobal(true);
     setIngestProgress(null);
     setIngestResult(null);
     try {
@@ -51,6 +57,7 @@ export default function RepositoryIntelligence() {
       console.error(err);
     } finally {
       setIsIngesting(false);
+      setIsIngestingGlobal(false);
       fetchRepos().then(data => setRepos(data.repos || []));
     }
   };
