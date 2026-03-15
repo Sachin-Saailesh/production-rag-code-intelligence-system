@@ -29,7 +29,10 @@ async def health_check():
     try:
         from qdrant_client import QdrantClient
         from codebase_analyst.config import settings
-        qc = QdrantClient(url=settings.qdrant_url)
+        qc = QdrantClient(
+            url=settings.qdrant_url,
+            api_key=settings.qdrant_api_key
+        )
         qc.get_collections()
         services["qdrant"] = "healthy"
     except Exception:
