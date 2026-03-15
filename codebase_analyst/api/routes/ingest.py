@@ -39,5 +39,10 @@ async def ingest_repository(request: IngestRequest):
                 "repo_name": request.repo_name or "",
                 "message": f"Ingestion failed: {str(e)}",
             })}
+        except BaseException as e:
+            logger.error("Ingestion fatally interrupted by BaseException: %s", type(e), exc_info=True)
+            raise
+        finally:
+            logger.info("Ingestion event generator exited.")
 
     return EventSourceResponse(event_generator())
