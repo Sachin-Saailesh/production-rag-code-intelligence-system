@@ -1,222 +1,97 @@
 # Production RAG Code Intelligence System
 
-AI-powered codebase analysis platform with hybrid RAG retrieval, reranking, and grounded answering.
+_Deployed Application:_ [Codebase Analyst](https://production-rag-code-intelligence-sy-ebon.vercel.app/)
 
-## Architecture
+An enterprise-grade, AI-powered codebase analysis platform designed with a focus on **Systemic Engineering**—building a stable, scalable, and memory-efficient software architecture around advanced AI models, rather than just developing models in isolation.
 
+## 🚀 The Demo: Indexing `encode/httpx`
+
+To experience the platform's capabilities without waiting for massive repositories, we recommend using the popular Python HTTP client `httpx` for the demo:
+
+1. Navigate to the deployed frontend.
+2. Enter the repository URL: `https://github.com/encode/httpx.git`
+3. Click "Ingest Repository". The system will stream the AST parsing, chunking, and embedding progress in real-time.
+4. Once complete, ask questions like _"How does the AsyncClient handle connection pooling?"_ or _"Where are the retry mechanisms implemented?"_
+
+---
+
+## 🏗️ Architectural Philosophy
+
+This system translates a critical business need—developer onboarding and code comprehension—into a resilient, scalable technical architecture. It was built focusing on several core engineering pillars:
+
+### 1. Systemic Engineering & High-Performance Pipelines
+
+Building stable, high-throughput software around advanced AI models.
+
+- **Flat-Memory Streaming Pipeline:** The ingestion engine bypasses traditional batch processing bottlenecks. By utilizing a highly optimized generator, it parses, chunks, embeds, and flushes _one file at a time_. This guarantees linear memory scaling and allows the system to effortlessly ingest massive, enterprise-scale 10,000+ file repositories without locking up resources.
+- **Zero-Footprint Embeddings:** Heavy local ML dependencies are stripped entirely. Instead, the architecture streams semantic batches to OpenAI's lightweight `text-embedding-3-small` API, enabling lightning-fast vectorization and minimizing container footprint.
+
+### 2. Data Intuition
+
+Understanding how to structure and curate data to maximize LLM retrieval performance.
+
+- **AST-Aware Chunking (Tree-sitter):** Simple line-splitting destroys code context. This system leverages `tree-sitter` to parse the language's Abstract Syntax Tree (AST), ensuring code chunks are intelligently broken down precisely at logical function and class boundaries.
+- **Hybrid Search Engine:** Combines dense semantic vector similarity (Qdrant) with precise lexical matching (BM25/TF-IDF) to ensure both conceptual questions and exact variable/function-name lookups return perfectly grounded citations.
+
+### 3. Architectural Foresight
+
+Designing systems that adapt to changing requirements, gracefully degrade, and support enterprise scaling.
+
+- **Multi-Tenant Vector Isolation:** Qdrant collections are dynamically namespaced per repository. This zero-contamination design ensures clean context retrieval across multiple simultaneous projects.
+- **Silent Fallbacks & Resilience:** If Redis caching fails, the system seamlessly bypasses it. If secondary API rate limits (like Cohere reranking) are hit, it falls back to raw hybrid retrieval. The application sustains functionality as long as the core LLM is reachable.
+
+### 4. Validation Rigor & Technical Agility
+
+- **Dynamic Query Routing:** User queries are classified in real-time by the LLM into categories like `symbol_lookup`, `architecture_question`, or `semantic_search`, triggering the optimal retrieval strategy.
+- **Comprehensive Observability:** Built-in Prometheus metrics track critical performance indicators like embedding latency, semantic cache hit rates, and retrieval confidence scores.
+
+---
+
+## ⚙️ System Architecture
+
+```text
+┌─────────────┐     ┌────────────────┐     ┌─────────────┐
+│  React UI   │────▶│ FastAPI Backend│────▶│ OpenAI APIs │
+│  (Vercel)   │     │ (Render)       │     │ (Embed/LLM) │
+└─────────────┘     └────────────────┘     └─────────────┘
+                            │
+          ┌─────────────────┼──────────────────┐
+          ▼                 ▼                  ▼
+  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐
+  │ Qdrant Cloud │   │ Upstash Redis│   │ Tree-sitter  │
+  │ (Vector DB)  │   │ (Caching)    │   │ (AST Parser) │
+  └──────────────┘   └──────────────┘   └──────────────┘
 ```
-┌─────────────┐     ┌────────────────┐     ┌──────────────┐
-│  FastAPI     │────▶│  Retrieval     │────▶│  Qdrant      │
-│  /api/query  │     │  Pipeline      │     │  (vectors)   │
-│  /api/ingest │     │  classify →    │     └──────────────┘
-│  /health     │     │  dense+sparse  │     ┌──────────────┐
-│  /metrics    │     │  → fuse →      │────▶│  Redis       │
-└─────────────┘     │  rerank(Cohere)│     │  (cache)     │
-                    │  → answer(LLM) │     └──────────────┘
-                    └────────────────┘
-                          │
-         ┌────────────────┼────────────────┐
-         ▼                ▼                ▼
-   ┌──────────┐   ┌────────────┐   ┌──────────────┐
-   │ Prometheus│   │  Grafana   │   │  OpenAI /    │
-   │ /metrics  │   │  Dashboard │   │  Azure LLM   │
-   └──────────┘   └────────────┘   └──────────────┘
-```
 
-## Quick Start
+## 🛠️ Local Development
 
 ### 1. Environment Setup
 
 ```bash
 cp .env.example .env
-# Edit .env with your API keys:
-#   OPENAI_API_KEY=sk-...
-#   COHERE_API_KEY=...  (optional, for reranking)
+# Required:
+# OPENAI_API_KEY=sk-...
+# QDRANT_URL=...
+# REDIS_URL=...
 ```
 
-### 2. Install Dependencies
+### 2. Run the API
 
 ```bash
 pip install -r requirements.txt
-```
-
-### 3. Run Locally
-
-```bash
-# Start the API server
-python main.py
-
-# Or use uvicorn directly
 uvicorn main:app --reload --port 8000
 ```
 
-### 4. Docker Compose (Local Infrastructure)
+### 3. Run the Frontend
 
 ```bash
-docker-compose up -d
+cd frontend
+npm install
+npm run dev
 ```
 
-This starts all 5 services for local development:
-| Service    | Port  | Description            |
-|------------|-------|------------------------|
-| **app**    | 8000  | FastAPI API server     |
-| **qdrant** | 6333  | Vector database        |
-| **redis**  | 6379  | Semantic cache         |
-| **prometheus** | 9090 | Metrics collection  |
-| **grafana**| 3000  | Monitoring dashboards  |
+## 🧠 Core Components
 
-### 5. Public Deployment
-For public deployment, the recommended stack is:
-- **Frontend**: [Vercel](https://vercel.com/) (React/Vite)
-- **Backend API**: [Render](https://render.com/) or [Railway](https://railway.app/) (FastAPI)
-- **Vector DB**: [Qdrant Cloud](https://cloud.qdrant.io/)
-- **Cache**: [Upstash Redis](https://upstash.com/)
-
-## CLI Usage
-
-### Ingest a Repository
-```bash
-# From Git URL
-python -m codebase_analyst.cli.ingest --repo-url https://github.com/owner/repo.git --repo-name myrepo
-
-# From local path
-python -m codebase_analyst.cli.ingest --repo-path /path/to/code --repo-name myrepo
-
-# Force full re-index
-python -m codebase_analyst.cli.ingest --repo-url https://github.com/owner/repo.git --force
-```
-
-### Ask Questions
-```bash
-python -m codebase_analyst.cli.ask "How does authentication work?" --repo-name myrepo
-python -m codebase_analyst.cli.ask "Where is UserModel defined?" --top-k 3
-python -m codebase_analyst.cli.ask "What are the dependencies of main.py?" --json-output
-```
-
-## API Endpoints
-
-### `POST /api/ingest`
-```json
-{
-  "repo_url": "https://github.com/owner/repo.git",
-  "repo_name": "myrepo",
-  "force_reindex": false
-}
-```
-
-### `POST /api/query`
-```json
-{
-  "query": "How does error handling work?",
-  "repo_name": "myrepo",
-  "top_k": 5
-}
-```
-
-**Response includes:**
-- Grounded answer with code citations
-- Query type classification (symbol_lookup, semantic, architecture, dependency, config)
-- Latency breakdown (retrieval, rerank, LLM)
-- Cache hit status
-
-### `GET /health`
-Returns service status for Qdrant, Redis, and LLM configuration.
-
-### `GET /metrics`
-Prometheus metrics endpoint.
-
-## Configuration
-
-All settings are loaded from environment variables or a `.env` file. See [.env.example](.env.example) for all options.
-
-Key settings:
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `OPENAI_API_KEY` | — | Required for LLM |
-| `COHERE_API_KEY` | — | Optional, enables reranking |
-| `LLM_PROVIDER` | `openai` | `openai` or `azure` |
-| `QDRANT_URL` | `http://localhost:6333` | Vector DB endpoint |
-| `REDIS_URL` | `redis://localhost:6379/0` | Cache endpoint |
-| `RERANK_ENABLED` | `true` | Toggle Cohere reranking |
-| `DENSE_WEIGHT` | `0.6` | Dense vs sparse balance |
-
-## Project Structure
-
-```
-├── main.py                         # FastAPI application entry point
-├── docker-compose.yml              # Full stack deployment
-├── Dockerfile                      # Application container
-├── requirements.txt                # Python dependencies
-├── .env.example                    # Environment variable template
-├── codebase_analyst/
-│   ├── config.py                   # Pydantic Settings (from .env)
-│   ├── core.py                     # System orchestrator
-│   ├── api/routes/                 # FastAPI endpoints
-│   │   ├── query.py                # POST /api/query
-│   │   ├── ingest.py               # POST /api/ingest
-│   │   └── health.py               # GET /health, /ready
-│   ├── cli/                        # Command-line entrypoints
-│   │   ├── ingest.py               # python -m codebase_analyst.cli.ingest
-│   │   └── ask.py                  # python -m codebase_analyst.cli.ask
-│   ├── services/                   # Business logic layer
-│   │   ├── retrieval.py            # Full retrieval pipeline
-│   │   ├── answering.py            # Grounded answer generation
-│   │   ├── rerank.py               # Cohere Rerank integration
-│   │   └── cache.py                # Redis semantic cache
-│   ├── ingestion/                  # Code ingestion
-│   │   ├── processor.py            # Repo cloning, scanning, hashing
-│   │   ├── parser.py               # Tree-sitter + AST parsing
-│   │   └── chunker.py              # Structure-aware chunking
-│   ├── indexing/                   # Embedding & storage
-│   │   ├── embedding.py            # SentenceTransformer embeddings
-│   │   ├── vector_store.py         # Qdrant vector store
-│   │   └── cache.py                # Legacy semantic cache
-│   ├── retrieval/                  # Search components
-│   │   ├── hybrid.py               # Dense + sparse fusion
-│   │   └── sparse.py               # TF-IDF retriever
-│   ├── models/                     # Data models
-│   │   ├── schemas.py              # API request/response schemas
-│   │   └── domain.py               # Internal domain models
-│   ├── analysis/                   # Code analysis tools
-│   │   ├── knowledge_graph.py      # Dependency graph (NetworkX)
-│   │   ├── architecture.py         # Pattern detection
-│   │   └── security.py             # Vulnerability scanning
-│   ├── monitoring/                 # Observability
-│   │   └── metrics.py              # Prometheus metrics
-│   ├── evaluation/                 # RAG quality
-│   │   └── rag_evaluator.py        # RAGAS integration
-│   └── utils/                      # Utilities
-│       └── exporter.py             # JSON/MD/HTML export
-├── monitoring/                     # Monitoring configs
-│   ├── prometheus.yml              # Prometheus scrape config
-│   └── grafana/                    # Grafana provisioning
-│       ├── dashboards/             # Dashboard JSON
-│       └── provisioning/           # Datasource + provider configs
-└── tests/                          # Unit tests
-    ├── test_config.py
-    ├── test_chunker.py
-    ├── test_retrieval.py
-    └── test_cache.py
-```
-
-## Testing
-
-```bash
-python -m pytest tests/ -v
-```
-
-## Monitoring
-
-Access Grafana at `http://localhost:3000` (admin/admin) to view the pre-configured dashboard with:
-- Query rate and latency (P50/P95)
-- LLM, retrieval, and rerank latency
-- Cache hit rate
-- System CPU/memory
-- Indexing stats
-
-## Key Design Decisions
-
-1. **Graceful degradation**: All external services (Qdrant, Redis, Cohere) fall back silently. The system works with just an OpenAI key.
-2. **Incremental indexing**: File content hashing avoids re-processing unchanged files.
-3. **Query classification**: Routes queries intelligently (symbol lookup vs semantic vs architecture).
-4. **Version-aware caching**: Cache keys include repo name and commit SHA to avoid stale results.
+- **`codebase_analyst/ingestion/`**: Contains the memory-safe `processor.py` for downloading/scanning repositories, and `chunker.py` for semantic AST-based splitting boundaries.
+- **`codebase_analyst/indexing/`**: Manages the connection to OpenAI for generating embeddings and Qdrant for storing the vectors (`embedding.py`, `vector_store.py`).
+- **`codebase_analyst/retrieval/`**: Houses the Hybrid Search engine, fusing Dense (cosine similarity) and Sparse (keyword) metrics.
